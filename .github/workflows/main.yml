@@ -1,14 +1,26 @@
-name: Slack Pull Request notifications
+name: Notify owners about new event via Slack
 
 on:
   pull_request_target:
+    types: [opened, reopened]
+    
+  issues:
     types: [opened, reopened]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Notify owners via Slack
+      - name: if_pr
+        if: github.event.pull_request
         run: |
-          curl -d '{ "pr_url": "${{ github.event.pull_request.html_url }}" }' ${{ secrets.SLACK_WEBHOOK_URL }}
+          echo "EVENT_TYPE=PR" >> $GITHUB_ENV
+          echo "EVENT_URL=${{ github.event.pull_request.html_url }}" >> $GITHUB_ENV
+      - name: if_issue
+        if: github.event.issue
+        run: |
+          echo "EVENT_TYPE=issue" >> $GITHUB_ENV
+          echo "EVENT_URL=${{ github.event.issue.html_url }}" >> $GITHUB_ENV
+      - name: notify
+        run: |
+          curl -d '{ "type": "${{ env.EVENT_TYPE }}", "url": "${{ env.EVENT_URL }}" }' ${{ secrets.SLACK_WEBHOOK_URL }}
