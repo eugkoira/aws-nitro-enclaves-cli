@@ -1,4 +1,5 @@
 *.o
+
 enclave
 build/
 crates-dependencies/
