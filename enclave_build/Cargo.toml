@@ -22,3 +22,4 @@ sha2 = "0.9.5"
 futures = "0.3.28"
 
 aws-nitro-enclaves-image-format = "0.2"
+bollard = "0.15.0"
