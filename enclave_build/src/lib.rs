@@ -1,4 +1,4 @@
-// Copyright 2019-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2019-2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 #![allow(clippy::too_many_arguments)]
 
@@ -12,7 +12,7 @@ mod yaml_generator;
 
 use aws_nitro_enclaves_image_format::defs::{EifBuildInfo, EifIdentityInfo, EIF_HDR_ARCH_ARM64};
 use aws_nitro_enclaves_image_format::utils::identity::parse_custom_metadata;
-use aws_nitro_enclaves_image_format::utils::{EifBuilder, SignEnclaveInfo};
+use aws_nitro_enclaves_image_format::utils::{EifBuilder, SignKeyData, SignKeyDataInfo};
 use docker::DockerUtil;
 use serde_json::json;
 use sha2::Digest;
@@ -31,7 +31,7 @@ pub struct Docker2Eif<'a> {
     linuxkit_path: String,
     artifacts_prefix: String,
     output: &'a mut File,
-    sign_info: Option<SignEnclaveInfo>,
+    sign_info: Option<SignKeyDataInfo>,
     img_name: Option<String>,
     img_version: Option<String>,
     metadata_path: Option<String>,
@@ -68,8 +68,7 @@ impl<'a> Docker2Eif<'a> {
         linuxkit_path: String,
         output: &'a mut File,
         artifacts_prefix: String,
-        certificate_path: &Option<String>,
-        key_path: &Option<String>,
+        sign_info: &Option<SignKeyDataInfo>,
         img_name: Option<String>,
         img_version: Option<String>,
         metadata_path: Option<String>,
@@ -98,15 +97,6 @@ impl<'a> Docker2Eif<'a> {
             }
         }
 
-        let sign_info = match (certificate_path, key_path) {
-            (None, None) => None,
-            (Some(cert_path), Some(key_path)) => Some(
-                SignEnclaveInfo::new(cert_path, key_path)
-                    .map_err(|err| Docker2EifError::SignImageError(format!("{err:?}")))?,
-            ),
-            _ => return Err(Docker2EifError::SignArgsError),
-        };
-
         Ok(Docker2Eif {
             docker_image,
             docker,
@@ -117,7 +107,7 @@ impl<'a> Docker2Eif<'a> {
             linuxkit_path,
             output,
             artifacts_prefix,
-            sign_info,
+            sign_info: sign_info.clone(),
             img_name,
             img_version,
             metadata_path,
@@ -275,10 +265,17 @@ impl<'a> Docker2Eif<'a> {
             _ => return Err(Docker2EifError::UnsupportedArchError),
         };
 
+        let sign_data = self
+            .sign_info
+            .as_ref()
+            .map(SignKeyData::new)
+            .transpose()
+            .map_err(|err| Docker2EifError::SignImageError(format!("{:?}", err)))?;
+
         let mut build = EifBuilder::new(
             Path::new(&self.kernel_img_path),
             self.cmdline.clone(),
-            self.sign_info.clone(),
+            sign_data,
             sha2::Sha384::new(),
             flags,
             self.generate_identity_info()?,

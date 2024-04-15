@@ -1,8 +1,9 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2019-2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 #![deny(missing_docs)]
 #![deny(warnings)]
 
+use aws_nitro_enclaves_image_format::utils::{SignKeyDataInfo, SignKeyInfo};
 use clap::ArgMatches;
 use libc::VMADDR_CID_HOST;
 #[cfg(test)]
@@ -104,10 +105,8 @@ pub struct BuildEnclavesArgs {
     pub docker_dir: Option<String>,
     /// The path where the enclave image file will be written to.
     pub output: String,
-    /// The path to the signing certificate for signed enclaves.
-    pub signing_certificate: Option<String>,
-    /// The path to the private key for signed enclaves.
-    pub private_key: Option<String>,
+    /// Details of key and certificate used for signing the EIF
+    pub sign_info: Option<SignKeyDataInfo>,
     /// The name of the enclave image.
     pub img_name: Option<String>,
     /// The version of the enclave image.
@@ -122,7 +121,7 @@ impl BuildEnclavesArgs {
         let signing_certificate = parse_signing_certificate(args);
         let private_key = parse_private_key(args);
 
-        match (&signing_certificate, &private_key) {
+        let sign_info = match (&signing_certificate, &private_key) {
             (Some(_), None) => {
                 return Err(new_nitro_cli_failure!(
                     "`private-key` argument not found",
@@ -137,7 +136,13 @@ impl BuildEnclavesArgs {
                 )
                 .add_info(vec!["signing-certificate"]))
             }
-            _ => (),
+            (Some(cert_path), Some(key_path)) => Some(SignKeyDataInfo {
+                cert_path: cert_path.clone(),
+                key_info: SignKeyInfo::LocalPrivateKeyInfo {
+                    path: key_path.clone(),
+                },
+            }),
+            (None, None) => None,
         };
 
         Ok(BuildEnclavesArgs {
@@ -156,8 +161,7 @@ impl BuildEnclavesArgs {
                 )
                 .add_info(vec!["output"])
             })?,
-            signing_certificate,
-            private_key,
+            sign_info,
             img_name: parse_image_name(args),
             img_version: parse_image_version(args),
             metadata: parse_metadata(args),

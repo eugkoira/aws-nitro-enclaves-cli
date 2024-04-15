@@ -1,4 +1,4 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2019-2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 #![deny(missing_docs)]
 #![deny(warnings)]
@@ -17,6 +17,7 @@ pub mod utils;
 
 use aws_nitro_enclaves_image_format::defs::eif_hasher::EifHasher;
 use aws_nitro_enclaves_image_format::utils::eif_reader::EifReader;
+use aws_nitro_enclaves_image_format::utils::SignKeyDataInfo;
 use aws_nitro_enclaves_image_format::{generate_build_info, utils::get_pcrs};
 use log::{debug, info};
 use sha2::{Digest, Sha384};
@@ -56,8 +57,7 @@ pub fn build_enclaves(args: BuildEnclavesArgs) -> NitroCliResult<()> {
         &args.docker_uri,
         &args.docker_dir,
         &args.output,
-        &args.signing_certificate,
-        &args.private_key,
+        &args.sign_info,
         &args.img_name,
         &args.img_version,
         &args.metadata,
@@ -71,8 +71,7 @@ pub fn build_from_docker(
     docker_uri: &str,
     docker_dir: &Option<String>,
     output_path: &str,
-    signing_certificate: &Option<String>,
-    private_key: &Option<String>,
+    sign_info: &Option<SignKeyDataInfo>,
     img_name: &Option<String>,
     img_version: &Option<String>,
     metadata_path: &Option<String>,
@@ -134,8 +133,7 @@ pub fn build_from_docker(
         format!("{}/linuxkit", blobs_path),
         &mut file_output,
         artifacts_path()?,
-        signing_certificate,
-        private_key,
+        sign_info,
         img_name.clone(),
         img_version.clone(),
         metadata_path.clone(),

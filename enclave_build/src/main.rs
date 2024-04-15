@@ -4,7 +4,10 @@
 use clap::{App, AppSettings, Arg};
 use std::fs::OpenOptions;
 
-use aws_nitro_enclaves_image_format::generate_build_info;
+use aws_nitro_enclaves_image_format::{
+    generate_build_info,
+    utils::{SignKeyDataInfo, SignKeyInfo},
+};
 use enclave_build::Docker2Eif;
 
 fn main() {
@@ -148,6 +151,13 @@ fn main() {
         .open(output)
         .expect("Failed to create output file");
 
+    let sign_info = signing_certificate.as_ref().map(|cert| SignKeyDataInfo {
+        cert_path: cert.to_string(),
+        key_info: SignKeyInfo::LocalPrivateKeyInfo {
+            path: private_key.unwrap(),
+        },
+    });
+
     let mut img = Docker2Eif::new(
         docker_image.to_string(),
         init_path.to_string(),
@@ -157,8 +167,7 @@ fn main() {
         linuxkit_path.to_string(),
         &mut output,
         ".".to_string(),
-        &signing_certificate,
-        &private_key,
+        &sign_info,
         img_name,
         img_version,
         metadata,
