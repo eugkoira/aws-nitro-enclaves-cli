@@ -120,29 +120,50 @@ impl BuildEnclavesArgs {
     pub fn new_with(args: &ArgMatches) -> NitroCliResult<Self> {
         let signing_certificate = parse_signing_certificate(args);
         let private_key = parse_private_key(args);
+        let kms_key_id = parse_kms_key_id(args);
+        let kms_key_region = parse_kms_key_region(args);
 
-        let sign_info = match (&signing_certificate, &private_key) {
-            (Some(_), None) => {
+        let sign_info = match (signing_certificate, kms_key_id, private_key) {
+            (None, None, None) => None,
+            (Some(cert_path), None, Some(key_path)) => Some(SignKeyDataInfo {
+                cert_path: cert_path.to_string(),
+                key_info: SignKeyInfo::LocalPrivateKeyInfo {
+                    path: key_path.to_string(),
+                },
+            }),
+            (Some(cert_path), Some(key_id), None) => Some(SignKeyDataInfo {
+                cert_path: cert_path.to_string(),
+                key_info: SignKeyInfo::KmsKeyInfo {
+                    id: key_id.to_string(),
+                    region: kms_key_region,
+                },
+            }),
+            (Some(_), None, None) => {
                 return Err(new_nitro_cli_failure!(
-                    "`private-key` argument not found",
+                    "`private-key` or `kms-key-id` argument not found",
                     NitroCliErrorEnum::MissingArgument
-                )
-                .add_info(vec!["private-key"]))
+                ))
             }
-            (None, Some(_)) => {
+            (None, Some(_), None) => {
                 return Err(new_nitro_cli_failure!(
-                    "`signing-certificate` argument not found",
+                    "`signing-certificate` argument not found while `kms-key-id` is provided",
                     NitroCliErrorEnum::MissingArgument
                 )
                 .add_info(vec!["signing-certificate"]))
             }
-            (Some(cert_path), Some(key_path)) => Some(SignKeyDataInfo {
-                cert_path: cert_path.clone(),
-                key_info: SignKeyInfo::LocalPrivateKeyInfo {
-                    path: key_path.clone(),
-                },
-            }),
-            (None, None) => None,
+            (None, None, Some(_)) => {
+                return Err(new_nitro_cli_failure!(
+                    "`signing-certificate` argument not found while `private-key` is provided",
+                    NitroCliErrorEnum::MissingArgument
+                )
+                .add_info(vec!["signing-certificate"]))
+            }
+            (_, Some(_), Some(_)) => {
+                return Err(new_nitro_cli_failure!(
+                    "`kms-key-id` and `private-key` parameters are mutually exclusive",
+                    NitroCliErrorEnum::ConflictingArgument
+                ))
+            }
         };
 
         Ok(BuildEnclavesArgs {
@@ -574,6 +595,14 @@ fn parse_error_code_str(args: &ArgMatches) -> NitroCliResult<String> {
         )
     })?;
     Ok(error_code_str.to_string())
+}
+
+fn parse_kms_key_region(args: &ArgMatches) -> Option<String> {
+    args.value_of("kms-key-region").map(|val| val.to_string())
+}
+
+fn parse_kms_key_id(args: &ArgMatches) -> Option<String> {
+    args.value_of("kms-key-id").map(|val| val.to_string())
 }
 
 #[cfg(test)]

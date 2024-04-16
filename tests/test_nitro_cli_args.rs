@@ -1,4 +1,4 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2019-2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 #![deny(warnings)]
 
@@ -649,5 +649,53 @@ mod test_nitro_cli_args {
         let args = vec!["nitro cli", "pcr", "--signing-certificate", "cert.pem"];
 
         assert!(app.get_matches_from_safe(args).is_ok())
+    }
+
+    #[test]
+    fn build_kms_signed_enclave_correct_command() {
+        let app = create_app!();
+        let args = vec![
+            "nitro cli",
+            "build-enclave",
+            "--docker-uri",
+            "dkr.ecr.us-east-1.amazonaws.com/stronghold-develss",
+            "--docker-dir",
+            "dir/",
+            "--output-file",
+            "image.eif",
+            "--signing-certificate",
+            "cert.pem",
+            "--kms-key-id",
+            "a23f54c8-b2ce-1a5c-a2db-f444a5b3d22d",
+            "--kms-key-region",
+            "eu-west-1",
+        ];
+
+        assert_eq!(app.get_matches_from_safe(args).is_err(), false)
+    }
+
+    #[test]
+    fn build_kms_signed_enclave_conflicting_arguments() {
+        let app = create_app!();
+        let args = vec![
+            "nitro cli",
+            "build-enclave",
+            "--docker-uri",
+            "dkr.ecr.us-east-1.amazonaws.com/stronghold-develss",
+            "--docker-dir",
+            "dir/",
+            "--output-file",
+            "image.eif",
+            "--signing-certificate",
+            "cert.pem",
+            "--kms-key-id",
+            "a23f54c8-b2ce-1a5c-a2db-f444a5b3d22d",
+            "--kms-key-region",
+            "eu-west-1",
+            "--private-key",
+            "key.pem",
+        ];
+
+        assert_eq!(app.get_matches_from_safe(args).is_err(), true)
     }
 }

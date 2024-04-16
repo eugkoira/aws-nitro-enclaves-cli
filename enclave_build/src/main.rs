@@ -1,13 +1,11 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2019-2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 use clap::{App, AppSettings, Arg};
 use std::fs::OpenOptions;
 
-use aws_nitro_enclaves_image_format::{
-    generate_build_info,
-    utils::{SignKeyDataInfo, SignKeyInfo},
-};
+use aws_nitro_enclaves_image_format::generate_build_info;
+use aws_nitro_enclaves_image_format::utils::{SignKeyDataInfo, SignKeyInfo};
 use enclave_build::Docker2Eif;
 
 fn main() {
@@ -90,6 +88,18 @@ fn main() {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("kms-key-id")
+                .long("kms-key-id")
+                .help("Specify id of the KMS key")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("kms-key-region")
+                .long("kms-key-region")
+                .help("Specify region in which the KMS key resides")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("build")
                 .short('b')
                 .long("build")
@@ -136,9 +146,27 @@ fn main() {
     let signing_certificate = matches
         .value_of("signing_certificate")
         .map(|val| val.to_string());
-    let private_key = matches
-        .value_of("private_certificate")
-        .map(|val| val.to_string());
+    let kms_key_id = matches.value_of("kms-key-id");
+    let kms_key_region = matches.value_of("kms-key-region");
+    let private_key_path = matches.value_of("private_key").map(|val| val.to_string());
+
+    let sign_key_info = match (signing_certificate, kms_key_id, private_key_path) {
+        (None, None, None) => None,
+        (Some(cert_path), None, Some(key_path)) =>
+            Some(SignKeyDataInfo {
+                cert_path: cert_path.to_string(),
+                key_info: SignKeyInfo::LocalPrivateKeyInfo { path: key_path.to_string() }
+            }),
+        (Some(cert_path), Some(key_id), None) =>
+            Some(SignKeyDataInfo {
+                cert_path: cert_path.to_string(),
+                key_info: SignKeyInfo::KmsKeyInfo { id: key_id.to_string(), region: kms_key_region.map(str::to_string) }
+            }),
+        (Some(_), None, None) => panic!("signing-certificate can be used only together with kms-key-id or private-key parameters"),
+        (None, Some(_), None) => panic!("signing-certificate is required together with kms-key-id parameters"),
+        (None, None, Some(_)) => panic!("signing-certificate is required together with private-key parameters"),
+        (_, Some(_), Some(_)) => panic!("kms-key-id and private-key parameters are mutually exclusive")
+    };
     let img_name = matches.value_of("image_name").map(|val| val.to_string());
     let img_version = matches.value_of("image_version").map(|val| val.to_string());
     let metadata = matches.value_of("metadata").map(|val| val.to_string());
@@ -151,13 +179,6 @@ fn main() {
         .open(output)
         .expect("Failed to create output file");
 
-    let sign_info = signing_certificate.as_ref().map(|cert| SignKeyDataInfo {
-        cert_path: cert.to_string(),
-        key_info: SignKeyInfo::LocalPrivateKeyInfo {
-            path: private_key.unwrap(),
-        },
-    });
-
     let mut img = Docker2Eif::new(
         docker_image.to_string(),
         init_path.to_string(),
@@ -167,7 +188,7 @@ fn main() {
         linuxkit_path.to_string(),
         &mut output,
         ".".to_string(),
-        &sign_info,
+        &sign_key_info,
         img_name,
         img_version,
         metadata,

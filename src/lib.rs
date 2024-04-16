@@ -735,12 +735,6 @@ macro_rules! create_app {
                             .takes_value(true),
                     )
                     .arg(
-                        Arg::with_name("private-key")
-                            .long("private-key")
-                            .help("Local path to developer's Eliptic Curve private key.")
-                            .takes_value(true),
-                    )
-                    .arg(
                         Arg::with_name("image_name")
                             .long("name")
                             .help("Name for enclave image")
@@ -757,6 +751,30 @@ macro_rules! create_app {
                             .long("metadata")
                             .help("Path to JSON containing the custom metadata provided by the user.")
                             .takes_value(true),
+                    )
+                    .arg(
+                        Arg::with_name("private-key")
+                            .long("private-key")
+                            .help("Local path to developer's Eliptic Curve private key.")
+                            .takes_value(true)
+                            .conflicts_with("kms-key-id")
+                            .conflicts_with("kms-key-region"),
+                    )
+                    .arg(
+                        Arg::with_name("kms-key-region")
+                            .long("kms-key-region")
+                            .help("The region in which the KMS key resides.")
+                            .takes_value(true)
+                            .required(false)
+                            .conflicts_with("private-key"),
+                    )
+                    .arg(
+                        Arg::with_name("kms-key-id")
+                            .long("kms-key-id")
+                            .help("The KMS key ID")
+                            .takes_value(true)
+                            .required(false)
+                            .conflicts_with("private-key"),
                     ),
             )
             .subcommand(
