@@ -42,9 +42,13 @@ log = "0.4"
 num-derive = "0.4"
 num-traits = "0.2"
 tempfile = "3.5"
+aws-sdk-kms = "<=1.20"
 
 [workspace]
 members = [".", "samples/command_executer", "driver-bindings", "eif_loader", "enclave_build", "vsock_proxy"]
 
 [features]
 default = []
+
+[patch.crates-io]
+aws-nitro-enclaves-image-format = { path = "/home/eugkoira/repos/github/shtaked/aws-nitro-enclaves-image-format" }

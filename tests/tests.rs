@@ -225,7 +225,7 @@ mod tests {
     }
 
     #[test]
-    fn build_enclaves_signed_simple_image() {
+    fn build_enclaves_local_signed_simple_image() {
         let dir = tempdir().unwrap();
         let dir_path = dir.path().to_str().unwrap();
         let eif_path = format!("{}/test.eif", dir_path);
@@ -271,6 +271,128 @@ mod tests {
             measurements.get("PCR2").unwrap(),
             sample_docker_pcrs::APP_PCR
         );
+    }
+
+    mod kms {
+        use aws_config::{BehaviorVersion, Region};
+        use aws_sdk_kms::Client;
+        use tokio::runtime::{Handle, Runtime};
+
+        use super::*;
+
+        use std::env;
+
+        fn generate_signing_cert_from_kms_key(cert_path: &str, key_id: &str, region_id: Option<&str>) {
+            //
+            let region_id_clone = region_id.map(|r| r.to_string());
+            let key_id_clone = key_id.to_string();
+            let act = async {
+                let mut config_loader = aws_config::defaults(BehaviorVersion::latest());
+                if let Some(region) = region_id_clone {
+                    config_loader = config_loader.region(Region::new(region));
+                }
+                let sdk_config = config_loader.load().await;
+
+                tokio::task::spawn_blocking(move || {
+                    let handle = Handle::current();
+                    let client = Client::new(&sdk_config);
+                    let request = client.get_public_key().key_id(key_id_clone).send();
+                    let public_key = handle
+                        .block_on(request)
+                        .unwrap()
+                        .public_key
+                        .unwrap();
+
+                    PKey::public_key_from_der(public_key.as_ref())
+                })
+                .await
+                .unwrap()
+            };
+
+            let runtime = Runtime::new().unwrap();
+            let pkey = runtime.block_on(act).unwrap();
+            //
+
+            // let ec_group = EcGroup::from_curve_name(Nid::SECP384R1).unwrap();
+            // let key = EcKey::generate(&ec_group).unwrap();
+            // let pkey = PKey::from_ec_key(key.clone()).unwrap();
+
+            let mut name = X509Name::builder().unwrap();
+            name.append_entry_by_nid(Nid::COMMONNAME, "aws.nitro-enclaves")
+                .unwrap();
+            let name = name.build();
+
+            let before = Asn1Time::days_from_now(0).unwrap();
+            let after = Asn1Time::days_from_now(365).unwrap();
+
+            let mut builder = X509::builder().unwrap();
+            builder.set_version(2).unwrap();
+            builder.set_subject_name(&name).unwrap();
+            builder.set_issuer_name(&name).unwrap();
+            builder.set_pubkey(&pkey).unwrap();
+            builder.set_not_before(&before).unwrap();
+            builder.set_not_after(&after).unwrap();
+            // builder.sign(&pkey, MessageDigest::sha384()).unwrap();
+
+            let cert = builder.build();
+
+            let mut cert_file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(cert_path)
+                .unwrap();
+            cert_file.write_all(&cert.to_pem().unwrap()).unwrap();
+        }
+
+        #[test]
+        fn build_enclaves_kms_signed_simple_image() {
+            let dir = tempdir().unwrap();
+            let dir_path = dir.path().to_str().unwrap();
+            let eif_path = format!("{}/test.eif", dir_path);
+            let cert_path = format!("{}/cert.pem", dir_path);
+            let key_id = env::var("AWS_KMS_TEST_KEY_ID").expect("Please set AWS_KMS_TEST_KEY_ID");
+            let key_region = env::var("AWS_KMS_TEST_KEY_REGION").ok();
+            generate_signing_cert_from_kms_key(&cert_path, &key_id, key_region.as_deref());
+
+            setup_env();
+            let args = BuildEnclavesArgs {
+                docker_uri: SAMPLE_DOCKER.to_string(),
+                docker_dir: None,
+                output: eif_path,
+                sign_info: Some(SignKeyDataInfo {
+                    cert_path: cert_path,
+                    key_info: SignKeyInfo::KmsKeyInfo { id: key_id, region: key_region },
+                }),
+                img_name: None,
+                img_version: None,
+                metadata: None,
+            };
+
+            let _measurements = build_from_docker(
+                &args.docker_uri,
+                &args.docker_dir,
+                &args.output,
+                &args.sign_info,
+                &args.img_name,
+                &args.img_version,
+                &args.metadata,
+            )
+            .expect("Docker build failed")
+            .1;
+
+            // assert_eq!(
+            //     measurements.get("PCR0").unwrap(),
+            //     sample_docker_pcrs::IMAGE_PCR
+            // );
+            // assert_eq!(
+            //     measurements.get("PCR1").unwrap(),
+            //     sample_docker_pcrs::KERNEL_PCR
+            // );
+            // assert_eq!(
+            //     measurements.get("PCR2").unwrap(),
+            //     sample_docker_pcrs::APP_PCR
+            // );
+        }
     }
 
     #[test]
