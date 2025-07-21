@@ -6,6 +6,8 @@
 
 This repository contains a collection of tools and commands used for managing the lifecycle of enclaves. The Nitro CLI needs to be installed on the parent instance, and it can be used to start, manage, and terminate enclaves.  
 
+Test
+
 ### Prerequisites
   1. A working docker setup, follow https://docs.docker.com/install/overview/ for details of how to install docker on your host, including how to run it as non-root.
   2. Install gcc, make, git, llvm-dev, libclang-dev, clang.
